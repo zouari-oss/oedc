@@ -1,0 +1,22 @@
+# Oracle Enterprise Database Container
+# 2026-09-19
+
+services:
+  oracle-db:
+    image: container-registry.oracle.com/database/enterprise:latest
+    container_name: oracle-db
+    hostname: oracle-host
+    env_file: .env
+    volumes:
+      - oracle_data:/opt/oracle/oradata
+      - /etc/localtime:/etc/localtime:ro # Mount host timezone file
+      - ./init-script:/opt/oracle/scripts/startup # Mount `*.sql`/`*.sh` init script(s)
+    environment:
+      - ORACLE_SID=${ORACLE_SID}
+      - ORACLE_PDB=${ORACLE_PDB}
+      - ORACLE_PWD=${ORACLE_PWD}
+      - ORACLE_CHARACTERSET=${ORACLE_CHARACTERSET}
+    # ports: [1521:1521]
+
+volumes:
+  oracle_data:
