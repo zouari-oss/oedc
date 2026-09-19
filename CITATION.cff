@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+title: "oedc"
+message: "If you use this project, please cite it using the metadata below."
+type: software
+
+authors:
+  - family-names: "Zouari"
+    given-names: "Omar"
+
+repository-code: "https://github/zouari-oss/oedc"
+url: "https://github/zouari-oss/oedc"
+
+abstract: >
+  Generic open-source project template.
+
+keywords:
+  - open-source
+  - docker
+  - git
+  - oracle
+  - database
+
+license: GPL-3.0
+version: "O.1.0"
+
+date-released: 2026-09-19
