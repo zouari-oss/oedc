@@ -1,22 +1,68 @@
 # Oracle Enterprise Database Container
-# 2026-09-19
+# Created: 2026-09-19 10:00
+# Updated: 2026-10-18 22:14
+
+x-base-config: &base-config
+  restart: on-failure
+
+x-env-config: &env-config
+  ORACLE_PWD: ${ORACLE_PWD:-MyPassword123!}
 
 services:
   oracle-db:
+    <<: *base-config
     image: container-registry.oracle.com/database/enterprise:latest
     container_name: oracle-db
     hostname: oracle-host
-    env_file: .env
+    environment:
+      <<: *env-config
+      ORACLE_USERNAME: ${ORACLE_USERNAME:-myuser}
+      ORACLE_SID: ${ORACLE_SID:-PRODCDB}
+      ORACLE_PDB: ${ORACLE_PDB:-PRODPDB1}
+      ORACLE_CHARACTERSET: ${ORACLE_CHARACTERSET:-AL32UTF8}
+      ENABLE_ARCHIVELOG: ${ENABLE_ARCHIVELOG:-false}
     volumes:
       - oracle_data:/opt/oracle/oradata
-      - /etc/localtime:/etc/localtime:ro # Mount host timezone file
-      - ./init-script:/opt/oracle/scripts/startup # Mount `*.sql`/`*.sh` init script(s)
-    environment:
-      - ORACLE_SID=${ORACLE_SID}
-      - ORACLE_PDB=${ORACLE_PDB}
-      - ORACLE_PWD=${ORACLE_PWD}
-      - ORACLE_CHARACTERSET=${ORACLE_CHARACTERSET}
-    # ports: [1521:1521]
+      - /etc/localtime:/etc/localtime:ro
+      - ./init-script:/opt/oracle/scripts/startup
+    expose: [1521]
+    healthcheck:
+      test: ["CMD", "/opt/oracle/checkDBStatus.sh"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 2m
+
+#  oracle-web:
+#    <<: *base-config
+#    image: container-registry.oracle.com/database/ords:latest
+#    container_name: oracle-web
+#    environment:
+#      <<: *env-config
+#      DBHOST: ${DBHOST:-oracle-host}
+#      DBPORT: ${DBPORT:-1521}
+#      DBSERVICENAME: ${DBSERVICENAME:-PRODPDB1}
+#      ORACLE_USER_PWD: ${ORACLE_USER_PWD:-MyPassword123!}
+#      DB_WAIT_RETRY: ${DB_WAIT_RETRY:-10}
+#      ORDS_DB_WAIT_RETRY: ${ORDS_DB_WAIT_RETRY:-10}
+#      FORCE_SECURE: ${FORCE_SECURE:-false}
+#      DEBUG: ${DEBUG:-true}
+#    volumes:
+#      - ords_config:/etc/ords/config
+#    ports: [8080:8080]
+#    healthcheck:
+#      test:
+#        [
+#          "CMD-SHELL",
+#          "curl --noproxy localhost -fsS http://localhost:8080/ords/sql-developer >/dev/null || exit 1",
+#        ]
+#      interval: 20s
+#      timeout: 10s
+#      retries: 5
+#    depends_on:
+#      oracle-db:
+#        condition: service_healthy
 
 volumes:
   oracle_data:
+  # ords_config:
