@@ -69,10 +69,12 @@ SET FEEDBACK OFF
 -- Exit setup script on any error
 WHENEVER SQLERROR EXIT SQL.SQLCODE
 
+-- Explicitly force container target
+ALTER SESSION SET CONTAINER = PRODPDB1;
+
 rem =======================================================
 rem Install descriptions
 rem =======================================================
-
 PROMPT
 PROMPT Thank you for installing the Oracle Human Resources Sample Schema.
 PROMPT This installation script will automatically exit your database session
@@ -83,30 +85,53 @@ PROMPT
 rem =======================================================
 rem Log installation process
 rem =======================================================
-
 SPOOL hr_install.log
 
 rem =======================================================
-rem Accept and verify schema password
+rem Define Input Parameters
 rem =======================================================
+DEFINE input_tbs = 'USERS'
+DEFINE overwrite = 'YES'
 
-ACCEPT pass PROMPT 'Enter a password for the user HR: ' HIDE
+rem =======================================================
+rem Fetch and Validate Environment Password Natively
+rem =======================================================
+VARIABLE hr_pass VARCHAR2(128);
 
+DECLARE
+   v_pass VARCHAR2(128);
 BEGIN
-   IF '&pass' IS NULL THEN
-      RAISE_APPLICATION_ERROR(-20999, 'Error: the HR password is mandatory! Please specify a password!');
+   -- 1. Extract directly from OS context
+   DBMS_SYSTEM.GET_ENV('ORACLE_HR_PASSWORD', v_pass);
+
+   -- 2. Validate it immediately inside the block
+   IF v_pass IS NULL OR TRIM(v_pass) IS NULL THEN
+      RAISE_APPLICATION_ERROR(-20999, 'Error: The environment variable ORACLE_HR_PASSWORD is not set or empty!');
    END IF;
+
+   :hr_pass := v_pass;
 END;
 /
 
-rem =======================================================
-rem Accept and verify tablespace name
-rem =======================================================
+-- Map the validated bind variable into a clean SQL*Plus substitution variable
+COLUMN env_pass_col NEW_VALUE sub_oracle_hr_password NOPRINT;
+SELECT :hr_pass AS env_pass_col FROM dual;
+CLEAR COLUMNS;
 
+rem =======================================================
+rem Define and verify tablespace name
+rem =======================================================
 COLUMN property_value NEW_VALUE var_default_tablespace NOPRINT
 SELECT property_value FROM database_properties WHERE property_name = 'DEFAULT_PERMANENT_TABLESPACE';
 
-ACCEPT tbs PROMPT 'Enter a tablespace for HR [&var_default_tablespace]: ' DEFAULT '&var_default_tablespace'
+-- Handle fallback default case if input is missing or literal 'DEFAULT'
+COLUMN final_tbs NEW_VALUE tbs NOPRINT;
+SELECT CASE 
+         WHEN NVL(TRIM('&input_tbs'), 'DEFAULT') = 'DEFAULT' THEN '&var_default_tablespace'
+         ELSE '&input_tbs'
+       END AS final_tbs 
+FROM dual;
+CLEAR COLUMNS;
 
 DECLARE
    v_tbs_exists   NUMBER := 0;
@@ -123,8 +148,13 @@ END;
 rem =======================================================
 rem cleanup old HR schema, if found and requested
 rem =======================================================
-
-ACCEPT overwrite_schema PROMPT 'Do you want to overwrite the schema, if it already exists? [YES|no]: ' DEFAULT 'YES'
+COLUMN final_overwrite NEW_VALUE overwrite_schema NOPRINT;
+SELECT CASE 
+         WHEN NVL(TRIM('&overwrite'), 'YES') = 'YES' THEN 'YES'
+         ELSE UPPER(TRIM('&overwrite'))
+       END AS final_overwrite 
+FROM dual;
+CLEAR COLUMNS;
 
 SET SERVEROUTPUT ON;
 DECLARE
@@ -138,7 +168,6 @@ BEGIN
       IF UPPER('&overwrite_schema') = 'YES' THEN
          EXECUTE IMMEDIATE 'DROP USER HR CASCADE';
          DBMS_OUTPUT.PUT_LINE('Old HR schema has been dropped.');
-      -- or raise error if the user doesn't want to overwrite it
       ELSE
          RAISE_APPLICATION_ERROR(-20997, 'Abort: the schema already exists and the user chose not to overwrite it.');
       END IF;
@@ -150,8 +179,7 @@ SET SERVEROUTPUT OFF;
 rem =======================================================
 rem create the HR schema user
 rem =======================================================
-
-CREATE USER hr IDENTIFIED BY "&pass"
+CREATE USER hr IDENTIFIED BY "&sub_oracle_hr_password"
                DEFAULT TABLESPACE &tbs
                QUOTA UNLIMITED ON &tbs;
 
@@ -173,27 +201,22 @@ ALTER SESSION SET NLS_TERRITORY=America;
 rem =======================================================
 rem create HR schema objects
 rem =======================================================
-
 @@hr_create.sql
 
 rem =======================================================
 rem populate tables with data
 rem =======================================================
-
 @@hr_populate.sql
 
 rem =======================================================
 rem create procedural objects
 rem =======================================================
-
 @@hr_code.sql
 
 rem =======================================================
 rem installation validation
 rem =======================================================
-
 SET HEADING ON
-rem reactivated by sub-scripts, turn it off again.
 SET FEEDBACK OFF
 
 SELECT 'Verification:' AS "Installation verification" FROM dual;
@@ -212,39 +235,19 @@ SELECT 'jobs' AS "Table", 19 AS "provided", count(1) AS "actual" FROM hr.jobs
 UNION ALL
 SELECT 'job_history' AS "Table", 10 AS "provided", count(1) AS "actual" FROM hr.job_history;
 
-rem
-rem Installation finish text.
-rem
-rem the SELECT '' FROM DUAL statements serve to print new lines
-rem and make the output more readable.
-rem
+SELECT 'The installation of the sample schema is now finished.'  AS "Thank you!" FROM dual
+UNION ALL
+SELECT 'Please check the installation verification output above.' AS "Thank you!" FROM dual
+UNION ALL
+SELECT '' AS "Thank you!" FROM dual
+UNION ALL
+SELECT 'You will now be disconnected from the database.' AS "Thank you!" FROM dual
+UNION ALL
+SELECT '' AS "Thank you!" FROM dual
+UNION ALL
+SELECT 'Thank you for using Oracle Database!' AS "Thank you!" FROM dual
+UNION ALL
+SELECT '' AS "Thank you!" FROM dual;
 
-SELECT 'The installation of the sample schema is now finished.'  AS "Thank you!"
-   FROM dual
-UNION ALL
-SELECT 'Please check the installation verification output above.' AS "Thank you!"
-   FROM dual
-UNION ALL
-SELECT '' AS "Thank you!"
-   FROM dual
-UNION ALL
-SELECT 'You will now be disconnected from the database.' AS "Thank you!"
-   FROM dual
-UNION ALL
-SELECT '' AS "Thank you!"
-   FROM dual
-UNION ALL
-SELECT 'Thank you for using Oracle Database!' AS "Thank you!"
-   FROM dual
-UNION ALL
-SELECT '' AS "Thank you!"
-   FROM dual;
-
-rem stop writing to the log file
-spool off
-
-rem
-rem Exit from the session.
-rem Use 'exit' and not 'disconnect' to keep behavior the same for when errors occur.
-rem
-exit
+SPOOL OFF
+EXIT

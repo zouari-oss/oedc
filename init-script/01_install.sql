@@ -1,1 +1,1 @@
--- @/opt/oracle/scripts/startup/human_resources/hr_install.sql
+@/opt/oracle/scripts/startup/human_resources/hr_install.sql
